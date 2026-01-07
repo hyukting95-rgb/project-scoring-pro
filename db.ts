@@ -468,12 +468,12 @@ export async function getAllProjects(): Promise<ProjectRecord[]> {
   if (!user) return [];
 
   const { data, error } = await supabase
-    .from('projects')
-    .select('id, project_uid, type, content, entry_date, entry_time, score, responsible_person, status, scoring_parts, raw_selections, total_work_days')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+    .rpc('get_user_projects');
 
-  if (error) throw error;
+  if (error) {
+    console.error('获取用户项目失败:', error);
+    throw error;
+  }
   
   console.log('getAllProjects: 加载了', data?.length || 0, '个项目');
   if (data && data.length > 0) {

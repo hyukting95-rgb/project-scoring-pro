@@ -37,6 +37,8 @@ import { UserManagement } from './components/UserManagement';
 import { 
   getAllProjects, 
   getAllPersonnel, 
+  getAllProjectsForAdmin,
+  getAllPersonnelForAdmin,
   getConfig,
   saveConfig,
   putProject, 
@@ -91,11 +93,17 @@ const App: React.FC = () => {
   // Storage
   const [projectRecords, setProjectRecords] = useState<ProjectRecord[]>([]);
   const [personnelRecords, setPersonnelRecords] = useState<PersonnelRecord[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
 
   React.useEffect(() => {
     (async () => {
+      setDataLoading(true);
       try {
-        const [projects, personnel, config] = await Promise.all([getAllProjects(), getAllPersonnel(), getConfig()]);
+        const dataPromises = permissions?.isAdmin 
+          ? [getAllProjectsForAdmin(), getAllPersonnelForAdmin(), getConfig()]
+          : [getAllProjects(), getAllPersonnel(), getConfig()];
+        
+        const [projects, personnel, config] = await Promise.all(dataPromises);
         setProjectRecords(projects.sort((a, b) => b.entryTime.localeCompare(a.entryTime)));
         setPersonnelRecords(personnel.sort((a, b) => b.entryTime.localeCompare(a.entryTime)));
         if (config) {
@@ -110,36 +118,36 @@ const App: React.FC = () => {
         } else {
           console.error(e);
         }
+      } finally {
+        setDataLoading(false);
       }
     })();
-  }, []);
+  }, [user, permissions]);
 
   // 实时数据同步
   React.useEffect(() => {
-    if (!user) return; // 只有登录用户才订阅实时更新
+    if (!user) return;
 
-    // 订阅项目变更
+    const isAdmin = permissions?.isAdmin || false;
+
     const projectsSubscription = subscribeToProjects((payload) => {
       console.log('Project实时更新:', payload);
-      // 重新获取项目数据
-      getAllProjects().then(projects => {
+      const fetchProjects = isAdmin ? getAllProjectsForAdmin() : getAllProjects();
+      fetchProjects.then(projects => {
         setProjectRecords(projects.sort((a, b) => b.entryTime.localeCompare(a.entryTime)));
       }).catch(console.error);
     });
 
-    // 订阅人员记录变更
     const personnelSubscription = subscribeToPersonnel((payload) => {
       console.log('Personnel实时更新:', payload);
-      // 重新获取人员记录数据
-      getAllPersonnel().then(personnel => {
+      const fetchPersonnel = isAdmin ? getAllPersonnelForAdmin() : getAllPersonnel();
+      fetchPersonnel.then(personnel => {
         setPersonnelRecords(personnel.sort((a, b) => b.entryTime.localeCompare(a.entryTime)));
       }).catch(console.error);
     });
 
-    // 订阅配置变更
     const configSubscription = subscribeToConfig((payload) => {
       console.log('Config实时更新:', payload);
-      // 重新获取配置数据
       getConfig().then(config => {
         if (config) {
           setScoringConfig(config);
@@ -147,13 +155,12 @@ const App: React.FC = () => {
       }).catch(console.error);
     });
 
-    // 清理订阅
     return () => {
       projectsSubscription.unsubscribe();
       personnelSubscription.unsubscribe();
       configSubscription.unsubscribe();
     };
-  }, [user]);
+  }, [user, permissions]);
   // Reactive Score Calculation
   const { currentScore, scoreDescription, scoringParts } = useMemo(() => {
     let score = 0;
@@ -228,8 +235,18 @@ const App: React.FC = () => {
     setSelectedAddons([]); setAddonPersons({}); setAddonWorkDays({}); setCmfpPerson1(''); setCmfpPerson2('');
     setCmfPerson(''); setMainCreator(''); setPackagePerson(''); setManualPerson('');
     setCmfpSupportWorkDays(1.0);
-    setCmfWorkDays(0);
+    setCmfWorkDays(1.0);
     setEditingProjectId(null);
+    // 新增需要重置的状态变量
+    setCmfpMode('additional');
+    setIsIndependent('yes');
+    setBaseScore(1.0);
+    setCmfpWorkDays(1.0);
+    setPackageWorkDays(1.0);
+    setManualWorkDays(1.0);
+    setDesignWorkDays(1.0);
+    setPackagePersons({});
+    setPackageWorkDaysMap({});
   };
 
   const handleEditInit = (id: string) => {
@@ -1199,6 +1216,7 @@ const App: React.FC = () => {
                   setProjectRecords(prev => prev.map(p => p.id === id ? { ...p, status } : p));
                   updateProjectStatus(id, status).catch(console.error);
                 }}
+                loading={dataLoading}
               />
             </section>
 

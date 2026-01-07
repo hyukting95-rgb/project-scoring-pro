@@ -20,6 +20,7 @@ interface Props {
   onDeleteProject: (id: string) => void;
   onEditProject: (id: string) => void;
   onUpdateProjectStatus: (id: string, status: ProjectStatus) => void;
+  loading?: boolean;
 }
 
 const RecordsDashboard: React.FC<Props> = ({ 
@@ -28,6 +29,7 @@ const RecordsDashboard: React.FC<Props> = ({
   onDeleteProject, 
   onEditProject,
   onUpdateProjectStatus,
+  loading = false
 }) => {
   const [search, setSearch] = React.useState('');
 
@@ -81,6 +83,14 @@ const RecordsDashboard: React.FC<Props> = ({
       {/* 搜索栏 */}
       <div className="flex justify-end">
         <div className="relative group w-full sm:w-80">
+          {loading && (
+            <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-2xl">
+              <div className="flex items-center gap-2 text-indigo-400">
+                <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm">加载中...</span>
+              </div>
+            </div>
+          )}
           <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
           <input 
             value={search}
