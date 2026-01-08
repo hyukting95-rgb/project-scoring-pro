@@ -228,18 +228,30 @@ export async function restoreBackup(backupId: string): Promise<void> {
 
     // 5. 恢复项目数据
     if (data.projects.length > 0) {
+      // 为每个项目添加当前用户的user_id
+      const projectsWithUserId = data.projects.map(project => ({
+        ...project,
+        user_id: user.id
+      }));
+      
       const { error: restoreProjectsError } = await supabase
         .from('projects')
-        .insert(data.projects);
+        .insert(projectsWithUserId);
 
       if (restoreProjectsError) throw restoreProjectsError;
     }
 
     // 6. 恢复人员记录数据
     if (data.personnel_records.length > 0) {
+      // 为每个人员记录添加当前用户的user_id
+      const personnelWithUserId = data.personnel_records.map(record => ({
+        ...record,
+        user_id: user.id
+      }));
+      
       const { error: restorePersonnelError } = await supabase
         .from('personnel_records')
-        .insert(data.personnel_records);
+        .insert(personnelWithUserId);
 
       if (restorePersonnelError) throw restorePersonnelError;
     }

@@ -36,13 +36,16 @@ const RecordsDashboard: React.FC<Props> = ({
   const filteredProjects = useMemo(() => 
     projectRecords.filter(p => 
       (p.projectUid?.toLowerCase().includes(search.toLowerCase()) || false) || 
-      p.id.toLowerCase().includes(search.toLowerCase()) || 
-      p.content.includes(search)
+      (p.id?.toLowerCase().includes(search.toLowerCase()) || false) || 
+      (p.content?.includes(search) || false)
     ),
   [projectRecords, search]);
 
   const filteredPersonnel = useMemo(() => 
-    personnelRecords.filter(r => r.person.includes(search) || r.content.includes(search)),
+    personnelRecords.filter(r => 
+      (r.person?.includes(search) || false) || 
+      (r.content?.includes(search) || false)
+    ),
   [personnelRecords, search]);
 
   const summaryData = useMemo(() => {
@@ -55,6 +58,8 @@ const RecordsDashboard: React.FC<Props> = ({
     }> = {};
 
     personnelRecords.forEach(r => {
+      if (!r.person || !r.projectId) return;
+      
       if (!summaryMap[r.person]) {
         summaryMap[r.person] = { person: r.person, completedUids: new Set(), inProgressUids: new Set(), points: 0, workDays: 0 };
       }
@@ -62,7 +67,7 @@ const RecordsDashboard: React.FC<Props> = ({
       if (project) {
         if (project.status === '已完成') {
           summaryMap[r.person].completedUids.add(r.projectId);
-          summaryMap[r.person].points += r.score;
+          summaryMap[r.person].points += r.score || 0;
           summaryMap[r.person].workDays += (r.workDays || 0);
         } else {
           summaryMap[r.person].inProgressUids.add(r.projectId);
@@ -206,7 +211,7 @@ const RecordsDashboard: React.FC<Props> = ({
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold text-sm shadow-inner border border-white/5">
-                          {r.person.charAt(0)}
+                          {(r.person || '').charAt(0)}
                         </div>
                         <span className="text-white font-bold text-sm">{r.person}</span>
                       </div>

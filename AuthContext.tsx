@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '@supabase/supabase-js';
-import { getCurrentUser, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut, checkUserPermissions } from './db';
+import { getCurrentUser, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut, checkUserPermissions, supabase } from './db';
 import { TEST_MODE, isTestMode } from './test-mode';
 import { UserPermissions, UserRole, UserStatus } from './types';
 
@@ -25,10 +25,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [permissions, setPermissions] = useState<UserPermissions | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchPermissions = async (currentUser: User | null): Promise<UserPermissions | null> => {
+  const fetchPermissions = async (currentUser: User | null): Promise<UserPermissions> => {
     if (!currentUser) {
-      setPermissions(null);
-      return null;
+      const defaultPerms: UserPermissions = {
+        isAdmin: false,
+        isActive: false,
+        role: 'member',
+        status: 'pending',
+        existsInTeam: false
+      };
+      setPermissions(defaultPerms);
+      return defaultPerms;
     }
 
     try {
@@ -37,8 +44,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return perms;
     } catch (error) {
       console.error('获取用户权限失败:', error);
-      setPermissions(null);
-      return null;
+      const defaultPerms: UserPermissions = {
+        isAdmin: false,
+        isActive: false,
+        role: 'member',
+        status: 'pending',
+        existsInTeam: false
+      };
+      setPermissions(defaultPerms);
+      return defaultPerms;
     }
   };
 
@@ -65,6 +79,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(currentUser);
         await fetchPermissions(currentUser);
       } catch (error) {
+        console.error('获取用户信息失败:', error);
         setUser(null);
         setPermissions(null);
       } finally {
@@ -72,7 +87,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     };
 
+    // 初始加载用户信息
     fetchUser();
+
+    // 监听认证状态变化
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth状态变化:', event, session);
+      try {
+        if (session?.user) {
+          // 用户已登录
+          setUser(session.user);
+          await fetchPermissions(session.user);
+        } else {
+          // 用户未登录
+          setUser(null);
+          setPermissions(null);
+        }
+      } catch (error) {
+        console.error('处理认证状态变化时出错:', error);
+        setUser(null);
+        setPermissions(null);
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    // 清理函数
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   const refreshPermissions = async (): Promise<UserPermissions | null> => {

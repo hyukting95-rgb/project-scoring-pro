@@ -41,12 +41,38 @@ export async function getCurrentUser() {
 }
 
 export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password
-  });
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+    
+    if (error) {
+      console.error('登录失败:', error);
+      
+      // 根据错误类型提供更具体的错误信息
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('ERR_PROXY_CONNECTION_FAILED')) {
+        throw new Error('网络连接失败，请检查网络设置或代理配置');
+      } else if (error.message?.includes('No API key found')) {
+        throw new Error('API密钥配置错误，请联系管理员');
+      } else if (error.message?.includes('Invalid login credentials')) {
+        throw new Error('邮箱或密码错误，请检查后重试');
+      } else {
+        throw new Error(`登录失败: ${error.message}`);
+      }
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('登录过程中发生错误:', error);
+    
+    // 重新抛出错误，让调用方处理
+    if (error instanceof Error) {
+      throw error;
+    } else {
+      throw new Error('登录过程中发生未知错误');
+    }
+  }
 }
 
 export async function signUp(email: string, password: string, displayName?: string) {
@@ -185,7 +211,7 @@ export async function getAllProjectsForAdmin(): Promise<ProjectRecord[]> {
   }
 
   const { data, error } = await supabase
-    .rpc('get_all_projects_for_admin');
+    .rpc('get_all_projects_for_backup');
 
   if (error) throw error;
 
@@ -218,18 +244,18 @@ export async function getAllPersonnelForAdmin(): Promise<PersonnelRecord[]> {
   }
 
   const { data, error } = await supabase
-    .rpc('get_all_personnel_for_admin');
+    .rpc('get_all_personnel_for_backup');
 
   if (error) throw error;
 
   return (data || []).map(record => ({
     id: record.id,
-    person: record.name,
+    person: record.person,
     projectId: record.project_id,
     projectUid: record.project_uid,
-    entryTime: record.created_at,
-    score: record.total_amount,
-    content: record.position_name,
+    entryTime: record.entry_time,
+    score: record.score,
+    content: record.content,
     workDays: record.work_days || 1.0
   }));
 }
@@ -465,7 +491,7 @@ export async function getAllProjects(): Promise<ProjectRecord[]> {
   }
   
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  if (!user) throw new Error('用户未登录');
 
   const { data, error } = await supabase
     .rpc('get_user_projects');
@@ -552,7 +578,8 @@ export async function putProjects(projects: ProjectRecord[]): Promise<void> {
     responsible_person: project.responsiblePerson,
     status: project.status,
     scoring_parts: project.scoringParts,
-    raw_selections: project.rawSelections
+    raw_selections: project.rawSelections,
+    total_work_days: project.totalWorkDays
   }));
 
   const { error } = await supabase

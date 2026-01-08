@@ -99,24 +99,76 @@ const App: React.FC = () => {
     (async () => {
       setDataLoading(true);
       try {
-        const dataPromises = permissions?.isAdmin 
+        // 尝试从Supabase获取数据
+        const isAdmin = permissions?.isAdmin || false;
+        const dataPromises = isAdmin 
           ? [getAllProjectsForAdmin(), getAllPersonnelForAdmin(), getConfig()]
           : [getAllProjects(), getAllPersonnel(), getConfig()];
         
         const [projects, personnel, config] = await Promise.all(dataPromises);
-        setProjectRecords(projects.sort((a, b) => b.entryTime.localeCompare(a.entryTime)));
-        setPersonnelRecords(personnel.sort((a, b) => b.entryTime.localeCompare(a.entryTime)));
+        
+        // 如果从Supabase获取到空数据，尝试从localStorage恢复
+        if (projects.length === 0) {
+          console.log('从Supabase获取到空项目数据，尝试从localStorage恢复');
+          const savedProjects = localStorage.getItem('projectRecords');
+          if (savedProjects) {
+            const parsedProjects = JSON.parse(savedProjects);
+            if (parsedProjects.length > 0) {
+              setProjectRecords(parsedProjects.sort((a: any, b: any) => b.entryTime.localeCompare(a.entryTime)));
+            } else {
+              setProjectRecords([]);
+            }
+          } else {
+            setProjectRecords([]);
+          }
+        } else {
+          setProjectRecords(projects.sort((a, b) => b.entryTime.localeCompare(a.entryTime)));
+        }
+        
+        if (personnel.length === 0) {
+          console.log('从Supabase获取到空人员数据，尝试从localStorage恢复');
+          const savedPersonnel = localStorage.getItem('personnelRecords');
+          if (savedPersonnel) {
+            const parsedPersonnel = JSON.parse(savedPersonnel);
+            if (parsedPersonnel.length > 0) {
+              setPersonnelRecords(parsedPersonnel.sort((a: any, b: any) => b.entryTime.localeCompare(a.entryTime)));
+            } else {
+              setPersonnelRecords([]);
+            }
+          } else {
+            setPersonnelRecords([]);
+          }
+        } else {
+          setPersonnelRecords(personnel.sort((a, b) => b.entryTime.localeCompare(a.entryTime)));
+        }
+        
         if (config) {
           setScoringConfig(config);
+        } else {
+          console.log('从Supabase获取配置失败，尝试从localStorage恢复');
+          const savedConfig = localStorage.getItem('scoringConfig');
+          if (savedConfig) {
+            setScoringConfig(JSON.parse(savedConfig));
+          }
         }
       } catch (e: any) {
         const errorMsg = e.message || String(e);
-        if (errorMsg.includes('请先登录')) {
-          console.log('用户未登录，跳过数据加载');
-        } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('fetch')) {
-          console.warn('无法连接到数据库，请检查网络连接或切换到测试模式');
-        } else {
-          console.error(e);
+        console.error('数据加载失败:', e);
+        console.log('尝试从localStorage恢复数据');
+        
+        // 发生任何错误时都尝试从localStorage恢复
+        const savedProjects = localStorage.getItem('projectRecords');
+        const savedPersonnel = localStorage.getItem('personnelRecords');
+        const savedConfig = localStorage.getItem('scoringConfig');
+        
+        if (savedProjects) {
+          setProjectRecords(JSON.parse(savedProjects));
+        }
+        if (savedPersonnel) {
+          setPersonnelRecords(JSON.parse(savedPersonnel));
+        }
+        if (savedConfig) {
+          setScoringConfig(JSON.parse(savedConfig));
         }
       } finally {
         setDataLoading(false);
@@ -134,7 +186,9 @@ const App: React.FC = () => {
       console.log('Project实时更新:', payload);
       const fetchProjects = isAdmin ? getAllProjectsForAdmin() : getAllProjects();
       fetchProjects.then(projects => {
-        setProjectRecords(projects.sort((a, b) => b.entryTime.localeCompare(a.entryTime)));
+        const sortedProjects = projects.sort((a, b) => b.entryTime.localeCompare(a.entryTime));
+        setProjectRecords(sortedProjects);
+        localStorage.setItem('projectRecords', JSON.stringify(sortedProjects));
       }).catch(console.error);
     });
 
@@ -142,7 +196,9 @@ const App: React.FC = () => {
       console.log('Personnel实时更新:', payload);
       const fetchPersonnel = isAdmin ? getAllPersonnelForAdmin() : getAllPersonnel();
       fetchPersonnel.then(personnel => {
-        setPersonnelRecords(personnel.sort((a, b) => b.entryTime.localeCompare(a.entryTime)));
+        const sortedPersonnel = personnel.sort((a, b) => b.entryTime.localeCompare(a.entryTime));
+        setPersonnelRecords(sortedPersonnel);
+        localStorage.setItem('personnelRecords', JSON.stringify(sortedPersonnel));
       }).catch(console.error);
     });
 
@@ -151,6 +207,7 @@ const App: React.FC = () => {
       getConfig().then(config => {
         if (config) {
           setScoringConfig(config);
+          localStorage.setItem('scoringConfig', JSON.stringify(config));
         }
       }).catch(console.error);
     });
@@ -495,15 +552,28 @@ const App: React.FC = () => {
     }
 
     if (editingProjectId) {
-      const targetId = uuidRegex.test(editingProjectId) ? editingProjectId : finalProjectId;
-      setProjectRecords(prev => prev.map(p => p.id === targetId ? newProject : p));
-      setPersonnelRecords(prev => [...prev.filter(r => r.projectId !== targetId), ...newPersRecords]);
-      replaceProjectAndPersonnel(newProject, newPersRecords)
-        .then(() => alert('项目更新成功！'))
-        .catch((error) => {
-          console.error('更新项目失败:', error);
-          alert(`更新失败: ${error.message}`);
+      try {
+        // 先保存到数据库
+        await replaceProjectAndPersonnel(newProject, newPersRecords);
+        
+        // 数据库保存成功后，再更新本地状态
+        const targetId = uuidRegex.test(editingProjectId) ? editingProjectId : finalProjectId;
+        setProjectRecords(prev => {
+          const updated = prev.map(p => p.id === targetId ? newProject : p);
+          localStorage.setItem('projectRecords', JSON.stringify(updated));
+          return updated;
         });
+        setPersonnelRecords(prev => {
+          const updated = [...prev.filter(r => r.projectId !== targetId), ...newPersRecords];
+          localStorage.setItem('personnelRecords', JSON.stringify(updated));
+          return updated;
+        });
+        
+        alert('项目更新成功！');
+      } catch (error: any) {
+        console.error('更新项目失败:', error);
+        alert(`更新失败: ${error.message}`);
+      }
     } else {
       try {
         // 先保存到数据库
