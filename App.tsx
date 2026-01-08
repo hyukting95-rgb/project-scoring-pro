@@ -505,19 +505,23 @@ const App: React.FC = () => {
           alert(`更新失败: ${error.message}`);
         });
     } else {
-      setProjectRecords(prev => {
-        const updated = [newProject, ...prev];
-        localStorage.setItem('projectRecords', JSON.stringify(updated));
-        return updated;
-      });
-      setPersonnelRecords(prev => {
-        const updated = [...newPersRecords, ...prev];
-        localStorage.setItem('personnelRecords', JSON.stringify(updated));
-        return updated;
-      });
       try {
+        // 先保存到数据库
         await putProject(newProject);
         await putPersonnel(newPersRecords);
+        
+        // 数据库保存成功后，再更新本地状态
+        setProjectRecords(prev => {
+          const updated = [newProject, ...prev];
+          localStorage.setItem('projectRecords', JSON.stringify(updated));
+          return updated;
+        });
+        setPersonnelRecords(prev => {
+          const updated = [...newPersRecords, ...prev];
+          localStorage.setItem('personnelRecords', JSON.stringify(updated));
+          return updated;
+        });
+        
         alert('录入成功！');
       } catch (error: any) {
         console.error('保存项目失败:', error);
